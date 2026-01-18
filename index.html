@@ -30,21 +30,44 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #475569;
         }
+        /* Loading state fix */
+        #root:empty::after {
+            content: 'Initializing QuantEdge Secure Node...';
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: #64748b;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "recharts": "https://esm.sh/recharts@^3.6.0",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.37.0"
-  }
-}
-</script>
+    <script>
+      // Shim process.env to prevent "process is not defined" error in browsers
+      window.process = { 
+        env: { 
+          API_KEY: "" // Will be injected by environment or left empty for offline mode
+        } 
+      };
+    </script>
+    <script type="importmap">
+    {
+      "imports": {
+        "recharts": "https://esm.sh/recharts@^3.6.0",
+        "react/": "https://esm.sh/react@^19.2.3/",
+        "react": "https://esm.sh/react@^19.2.3",
+        "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+        "@google/genai": "https://esm.sh/@google/genai@^1.37.0"
+      }
+    }
+    </script>
 </head>
 <body>
     <div id="root"></div>
+    <!-- Explicitly load the entry point -->
+    <script type="module" src="index.tsx"></script>
 </body>
 </html>
