@@ -6,27 +6,29 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
  * Fetches market insights specifically citing high-profile institutional sources and 30-year track records.
+ * Incorporates specific luminaries and regional signals.
  */
 export async function getInstitutionalInsights() {
-  const prompt = `Perform a high-precision global equity scan. Identify the top 5 'Mission Critical' priority stocks in G7, OECD, and Emerging Markets (India, Brazil, Mexico, Chile, Peru).
+  const prompt = `Perform a high-precision global macro and equity scan. Identify the top 5 'High Conviction' priority stocks in G7, OECD, and Emerging Markets (India, Brazil, Mexico, Chile, Peru).
   
-  CRITICAL: You MUST evaluate these based on the overlapping high-conviction strategies of:
-  - Lyn Alden (Macro structure/Commodity cycles)
-  - Stanley Druckenmiller (Secular growth/Liquidity)
-  - Michael Burry (Deep value/Contrarian plays)
-  - David Rubenstein (PE Moats/Institutional stability)
-  - Vanguard/Bogleheads (Low-cost quality/Diversification)
-  - Stanley B. Resor/Mutual Fund Observer (Long-term track records)
-  - Polymarket (Prediction market sentiment)
-  - WallStreetBets/Bogleheads (Retail flow and fundamental bedrock)
+  CRITICAL: Evaluate these through the lens of:
+  - Lyn Alden (Global macro, structural cycles, and energy/commodity focus)
+  - Stanley Druckenmiller (Secular growth, liquidity cycles, and aggressive growth/contraction pivots)
+  - Michael Burry (Deep contrarian value, supply-side imbalances, and market fragility)
+  - David Rubenstein (PE Moats, institutional stability, and private equity alignment)
+  - Vanguard/Bogleheads (Broad quality bedrock, low-cost structural winners)
+  - Mutual Fund Observer (Long-term relative performance and risk-adjusted alpha)
+  - Polymarket (Prediction market sentiment on elections, rate cuts, and macro shifts)
+  - WallStreetBets (Retail flow momentum vs fundamental disconnects)
   
+  Geographic Focus: India (Infra/Digital), Brazil (Agri/Energy), Mexico (Nearshoring), Peru/Chile (Copper/Lithium), and G-7 (Tech/Financials).
+
   Format the response as a JSON object with:
-  1. "marketSummary": A precise overview of global macro risks and opportunities.
-  2. "priorityStocks": Array of 5 stocks with ticker, name, country, 'recommendedBy' (citing specific names from the list above), and 'thesisSnippet'.
-  3. "newsFeed": Array of 5 news items with headline, source (Bloomberg, WSJ, FT, or Yahoo Finance ONLY), url, and time.`;
+  1. "marketSummary": A precise macro overview.
+  2. "priorityStocks": Array of 5 stocks with ticker, name, country, 'recommendedBy' (cite specific names like 'Lyn Alden', 'Burry', etc.), and 'thesisSnippet'.
+  3. "newsFeed": Array of 8-10 news items with headline, source (Reuters, Bloomberg, FT, or Biztoc), summary (a concise AI-summarized version), url, and time. Ensure coverage of India, Brazil, Mexico, Chile, Peru and G-7 macro trends.`;
 
   try {
-    // Using gemini-3-pro-preview for high-precision global scan as it's a complex text task
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: prompt,
@@ -58,10 +60,11 @@ export async function getInstitutionalInsights() {
                 properties: {
                   headline: { type: Type.STRING },
                   source: { type: Type.STRING },
+                  summary: { type: Type.STRING },
                   url: { type: Type.STRING },
                   time: { type: Type.STRING }
                 },
-                required: ['headline', 'source', 'url', 'time']
+                required: ['headline', 'source', 'summary', 'url', 'time']
               }
             }
           },
@@ -77,7 +80,6 @@ export async function getInstitutionalInsights() {
       console.error("Error parsing AI response:", e);
     }
     
-    // Extract grounding chunks as required by the Search Grounding guidelines
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
     return { ...result, groundingChunks };
@@ -93,17 +95,18 @@ export async function getInstitutionalInsights() {
 export async function analyzeStock(stock: StockMetric): Promise<StockAnalysis> {
   const prompt = `Quant Analyst Report: ${stock.name} (${stock.ticker})
   Analyze using 30 years of historical context.
-  Metrics: P/E: ${stock.peRatio}, ROE: ${stock.roe}%, ROIC: ${stock.roic}%, FCF Yield: ${stock.fcfYield}%.
+  Metrics: P/E: ${stock.peRatio}, ROE: ${stock.roe}%, ROIC: ${stock.roic}%, FCF Yield: ${stock.fcfYield}%, Cash on Hand: $${stock.cashOnHand}B.
+  
+  Compare against Yahoo Finance benchmarks for ${stock.country} region. 
   
   Output Requirements:
   1. Summary of 30yr fundamental stability.
-  2. Valuation rating.
+  2. Valuation rating (Under/Fair/Over).
   3. Risk score (1-10).
   4. Thesis points.
   5. Primary Risk Factors.`;
 
   try {
-    // Using gemini-3-pro-preview for complex reasoning and analysis
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: prompt,
