@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, TrendingUp, Globe, Filter, Activity, ArrowUpRight, ArrowDownRight,
   Info, ChevronRight, Loader2, Briefcase, Download, Newspaper, Star, 
-  ExternalLink, ShieldCheck, Database, RefreshCcw
+  ExternalLink, ShieldCheck, Database, RefreshCcw, AlertTriangle
 } from 'lucide-react';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip
@@ -21,6 +22,7 @@ const App: React.FC = () => {
   const [marketSummary, setMarketSummary] = useState<string>('');
   const [priorityStocks, setPriorityStocks] = useState<PriorityStock[]>([]);
   const [newsFeed, setNewsFeed] = useState<NewsItem[]>([]);
+  const [groundingSources, setGroundingSources] = useState<any[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [filters, setFilters] = useState<ScreenerFilter>({
     countryGroup: CountryGroup.ALL,
@@ -29,6 +31,29 @@ const App: React.FC = () => {
     minROE: 0,
     sector: 'All'
   });
+
+  useEffect(() => {
+    // API key availability is handled externally per guidelines; removed restricted UI checks.
+    refreshIntelligence(); 
+  }, []);
+
+  const refreshIntelligence = async () => {
+    setIsRefreshing(true);
+    try {
+      const data = await getInstitutionalInsights();
+      if (data) {
+        setMarketSummary(data.marketSummary);
+        setPriorityStocks(data.priorityStocks);
+        setNewsFeed(data.newsFeed);
+        // Store grounding sources for UI display as required by Search Grounding guidelines
+        setGroundingSources(data.groundingChunks || []);
+      }
+    } catch (err) {
+      console.warn("AI Sync unavailable - running in deterministic mode.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const filteredStocks = useMemo(() => {
     return stocks.filter(s => {
@@ -50,19 +75,6 @@ const App: React.FC = () => {
     }).sort((a, b) => b.marketCap - a.marketCap);
   }, [stocks, searchQuery, filters]);
 
-  useEffect(() => { refreshIntelligence(); }, []);
-
-  const refreshIntelligence = async () => {
-    setIsRefreshing(true);
-    const data = await getInstitutionalInsights();
-    if (data) {
-      setMarketSummary(data.marketSummary);
-      setPriorityStocks(data.priorityStocks);
-      setNewsFeed(data.newsFeed);
-    }
-    setIsRefreshing(false);
-  };
-
   const exportToCSV = () => {
     const headers = ["Ticker", "Name", "Country", "Sector", "Price", "Market Cap", "P/E", "ROE", "ROIC", "FCF Yield"];
     const rows = filteredStocks.map(s => [s.ticker, s.name, s.country, s.sector, s.price, s.marketCap, s.peRatio, s.roe, s.roic, s.fcfYield]);
@@ -80,12 +92,16 @@ const App: React.FC = () => {
     setSelectedStock(stock);
     setLoadingAnalysis(true);
     setAnalysis(null);
-    const result = await analyzeStock(stock);
-    setAnalysis(result);
-    setLoadingAnalysis(false);
+    try {
+      const result = await analyzeStock(stock);
+      setAnalysis(result);
+    } catch (err) {
+      console.error("Analysis node failed.");
+    } finally {
+      setLoadingAnalysis(false);
+    }
   };
 
-  // Enhanced Color Coding
   const getPEColor = (pe: number) => {
     if (pe < 12) return 'text-emerald-400 font-bold';
     if (pe < 22) return 'text-emerald-200';
@@ -156,7 +172,6 @@ const App: React.FC = () => {
       <main className="flex-1 flex overflow-hidden">
         {/* Left Sidebar - Intelligence Hub */}
         <aside className="w-[360px] border-r border-slate-800 flex flex-col hidden 2xl:flex bg-slate-950/50">
-          {/* Priority Study */}
           <div className="p-5 border-b border-slate-800 flex-1 overflow-y-auto custom-scrollbar">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
@@ -170,9 +185,6 @@ const App: React.FC = () => {
                 <div key={i} className="h-32 bg-slate-900/50 rounded-xl animate-pulse" />
               )) : priorityStocks.map((ps, i) => (
                 <div key={i} className="p-4 bg-slate-900/30 rounded-xl border border-slate-800 hover:border-emerald-500/50 transition-all group cursor-pointer shadow-sm relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/20"></div>
-                  </div>
                   <div className="flex justify-between items-start mb-2">
                     <span className="font-black text-white text-sm mono tracking-tighter">{ps.ticker}</span>
                     <span className="text-[9px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800 font-bold">{ps.country}</span>
@@ -188,12 +200,11 @@ const App: React.FC = () => {
                 </div>
               ))}
               {!isRefreshing && priorityStocks.length === 0 && (
-                <p className="text-[11px] text-slate-600 text-center py-10 italic">Initializing institutional filters...</p>
+                <p className="text-[11px] text-slate-600 text-center py-10 italic">Awaiting Priority Signal Synchronization...</p>
               )}
             </div>
           </div>
 
-          {/* Institutional News Feed */}
           <div className="p-5 h-[40%] overflow-y-auto bg-slate-900/10 border-t border-slate-800/50">
             <div className="flex items-center gap-2 mb-4">
               <Newspaper className="w-4 h-4 text-blue-400" />
@@ -215,6 +226,24 @@ const App: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {/* Displaying extracted grounding URLs as required by Search Grounding guidelines */}
+            {groundingSources.length > 0 && (
+              <div className="mt-6 pt-5 border-t border-slate-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Analysis Sources</h3>
+                </div>
+                <div className="space-y-2">
+                  {groundingSources.map((chunk, i) => chunk.web && (
+                    <a key={i} href={chunk.web.uri} target="_blank" rel="noopener noreferrer" 
+                       className="text-[9px] text-slate-500 hover:text-emerald-400 block truncate font-mono flex items-center gap-1.5 transition-colors">
+                      <ExternalLink className="w-2 h-2 flex-shrink-0" /> {chunk.web.title || chunk.web.uri}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </aside>
 
@@ -229,12 +258,11 @@ const App: React.FC = () => {
                  Global Analyst Summary <div className="w-1 h-1 rounded-full bg-emerald-500/50"></div>
                </h4>
                <p className="text-[12px] text-slate-400 leading-relaxed font-medium line-clamp-2 italic">
-                 {marketSummary || "Synchronizing with Bloomberg, WSJ, and FT data hubs. Adjusting for 30-year track record benchmarks..."}
+                 {marketSummary || "Running quantitative sweep across Bloomberg, WSJ, and FT nodes. Calibrating for 30-year risk benchmarks..."}
                </p>
              </div>
           </div>
 
-          {/* Fast Filters */}
           <div className="px-6 py-3 border-b border-slate-800 flex items-center gap-8 overflow-x-auto no-scrollbar bg-slate-950/80">
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-1">
@@ -257,13 +285,8 @@ const App: React.FC = () => {
                 {SECTORS.map(s => <option key={s} value={s} className="bg-slate-950">{s}</option>)}
               </select>
             </div>
-            <div className="ml-auto flex items-center gap-3 bg-slate-900/40 px-3 py-1.5 rounded-lg border border-slate-800">
-              <span className="text-[9px] font-black text-slate-500 uppercase">EOD Precision:</span>
-              <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest">Synchronized</span>
-            </div>
           </div>
 
-          {/* Screener Table */}
           <div className="flex-1 overflow-auto p-6 custom-scrollbar">
             <table className="w-full text-left border-separate border-spacing-y-3">
               <thead>
@@ -309,16 +332,10 @@ const App: React.FC = () => {
                 ))}
               </tbody>
             </table>
-            {filteredStocks.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-600">
-                <Database className="w-12 h-12 mb-4 opacity-10" />
-                <p className="text-sm font-medium italic">No matches found in G7/OECD node clusters. Loosen quantitative filters.</p>
-              </div>
-            )}
           </div>
         </section>
 
-        {/* Right Panel - Deep Dive Analysis */}
+        {/* Right Panel - Deep Dive */}
         {selectedStock && (
           <aside className="w-[480px] border-l border-slate-800 bg-slate-950 p-7 overflow-y-auto hidden xl:block animate-in slide-in-from-right duration-500 shadow-[-10px_0_30px_rgba(0,0,0,0.5)] z-10">
             <div className="flex justify-between items-start mb-8">
@@ -335,13 +352,11 @@ const App: React.FC = () => {
               </button>
             </div>
 
-            {/* Price Chart */}
             <div className="h-64 mb-8 p-5 bg-slate-900/30 rounded-2xl border border-slate-800 shadow-inner group">
                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4 flex items-center justify-between">
                  <div className="flex items-center gap-2">
                    <Activity className="w-3.5 h-3.5 text-emerald-500" /> 30-Year Performance Index
                  </div>
-                 <span className="text-emerald-500 font-mono text-[9px] opacity-0 group-hover:opacity-100 transition-opacity">CAGR SIMULATED</span>
                </h3>
                <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={generateHistoricalData(selectedStock.price, 30)}>
@@ -355,15 +370,13 @@ const App: React.FC = () => {
                     <XAxis dataKey="year" hide />
                     <YAxis hide domain={['auto', 'auto']} />
                     <Tooltip 
-                      contentStyle={{ backgroundColor: '#020617', border: '1px solid #1e293b', borderRadius: '12px', fontSize: '10px', boxShadow: '0 10px 15px rgba(0,0,0,0.5)' }}
-                      labelStyle={{ color: '#64748b', fontWeight: 'bold', marginBottom: '4px' }}
+                      contentStyle={{ backgroundColor: '#020617', border: '1px solid #1e293b', borderRadius: '12px', fontSize: '10px' }}
                     />
-                    <Area type="monotone" dataKey="price" stroke="#10b981" fill="url(#pGrad)" strokeWidth={3} dot={false} animationDuration={2000} />
+                    <Area type="monotone" dataKey="price" stroke="#10b981" fill="url(#pGrad)" strokeWidth={3} dot={false} />
                   </AreaChart>
                </ResponsiveContainer>
             </div>
 
-            {/* AI Report */}
             <div className="space-y-8 pb-10">
                <div className="flex items-center justify-between">
                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -374,54 +387,35 @@ const App: React.FC = () => {
 
                {loadingAnalysis ? (
                  <div className="space-y-6">
-                   <div className="flex gap-4"><div className="h-16 bg-slate-900 rounded-xl w-full animate-pulse"></div><div className="h-16 bg-slate-900 rounded-xl w-full animate-pulse"></div></div>
+                   <div className="h-16 bg-slate-900 rounded-xl w-full animate-pulse"></div>
                    <div className="h-32 bg-slate-900 rounded-xl w-full animate-pulse"></div>
-                   <div className="space-y-2"><div className="h-4 bg-slate-900 rounded w-full animate-pulse"></div><div className="h-4 bg-slate-900 rounded w-5/6 animate-pulse"></div></div>
                  </div>
                ) : analysis && (
                  <div className="space-y-7 animate-in fade-in duration-700">
                     <div className="flex gap-4">
-                      <div className="flex-1 bg-slate-900/40 p-4 rounded-xl border border-slate-800 shadow-sm">
-                        <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest block mb-2">Quant Valuation</span>
+                      <div className="flex-1 bg-slate-900/40 p-4 rounded-xl border border-slate-800 shadow-sm text-center">
+                        <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest block mb-2">Valuation</span>
                         <span className={`text-sm font-black uppercase ${analysis.valuation === 'Under' ? 'text-emerald-400' : analysis.valuation === 'Over' ? 'text-rose-400' : 'text-yellow-400'}`}>{analysis.valuation}valued</span>
                       </div>
-                      <div className="flex-1 bg-slate-900/40 p-4 rounded-xl border border-slate-800 shadow-sm">
-                        <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest block mb-2">Hedge Fund Risk</span>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-black text-white">{analysis.riskScore}/10</span>
-                          <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                             <div className={`h-full transition-all duration-1000 ${analysis.riskScore < 4 ? 'bg-emerald-500' : analysis.riskScore < 7 ? 'bg-yellow-500' : 'bg-rose-500'}`} style={{ width: `${analysis.riskScore * 10}%` }} />
-                          </div>
-                        </div>
+                      <div className="flex-1 bg-slate-900/40 p-4 rounded-xl border border-slate-800 shadow-sm text-center">
+                        <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest block mb-2">Risk Factor</span>
+                        <span className="text-sm font-black text-white">{analysis.riskScore}/10</span>
                       </div>
                     </div>
-                    <div className="bg-emerald-500/5 p-5 rounded-2xl border-l-4 border-emerald-500/40 shadow-inner">
-                      <p className="text-[12px] text-slate-300 leading-relaxed font-medium italic opacity-90">"{analysis.summary}"</p>
+                    <div className="bg-emerald-500/5 p-5 rounded-2xl border-l-4 border-emerald-500/40">
+                      <p className="text-[12px] text-slate-300 leading-relaxed font-medium italic">"{analysis.summary}"</p>
                     </div>
                     <div>
-                      <h4 className="text-[10px] font-black text-emerald-400 uppercase mb-4 tracking-widest flex items-center gap-2"><ArrowUpRight className="w-3 h-3" /> Alpha Thesis</h4>
-                      <div className="space-y-4">
-                        {analysis.investmentThesis.map((t, i) => (
-                          <div key={i} className="text-[11px] text-slate-400 flex items-start gap-3 group">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/30 mt-1 transition-transform group-hover:scale-125 group-hover:bg-emerald-500"></div>
-                            {t}
-                          </div>
-                        ))}
+                      <h4 className="text-[10px] font-black text-emerald-400 uppercase mb-4 tracking-widest flex items-center gap-2"><ArrowUpRight className="w-3 h-3" /> Thesis</h4>
+                      <div className="space-y-3">
+                        {analysis.investmentThesis.map((t, i) => (<div key={i} className="text-[11px] text-slate-400 flex items-start gap-3"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500/40 mt-1"></div>{t}</div>))}
                       </div>
                     </div>
                     <div>
-                      <h4 className="text-[10px] font-black text-rose-400 uppercase mb-4 tracking-widest flex items-center gap-2"><ArrowDownRight className="w-3 h-3" /> Risk Factors</h4>
-                      <div className="space-y-4">
-                        {analysis.risks.map((r, i) => (
-                          <div key={i} className="text-[11px] text-slate-400 flex items-start gap-3 group">
-                            <div className="w-1.5 h-1.5 rounded-full bg-rose-500/30 mt-1 transition-transform group-hover:scale-125 group-hover:bg-rose-500"></div>
-                            {r}
-                          </div>
-                        ))}
+                      <h4 className="text-[10px] font-black text-rose-400 uppercase mb-4 tracking-widest flex items-center gap-2"><ArrowDownRight className="w-3 h-3" /> Risks</h4>
+                      <div className="space-y-3">
+                        {analysis.risks.map((r, i) => (<div key={i} className="text-[11px] text-slate-400 flex items-start gap-3"><div className="w-1.5 h-1.5 rounded-full bg-rose-500/40 mt-1"></div>{r}</div>))}
                       </div>
-                    </div>
-                    <div className="pt-8 border-t border-slate-800 text-[10px] text-slate-700 font-mono text-center uppercase tracking-[0.2em]">
-                      Quant Node: SECURE-99 • EOD Feed SYNCED
                     </div>
                  </div>
                )}
@@ -430,21 +424,13 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Footer Status Bar */}
       <footer className="border-t border-slate-800 bg-slate-950 px-6 py-2.5 flex items-center justify-between text-[9px] font-mono text-slate-600 uppercase tracking-widest z-20">
         <div className="flex gap-10">
-          <span className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div> 
-            QUANT_CORE_SECURE
-          </span>
-          <span className="hidden md:inline">G7_CLUSTER: ACTIVE</span>
-          <span className="hidden md:inline">EM_CLUSTER: ACTIVE</span>
-          <span className="hidden md:inline">LATENCY: 12MS</span>
+          <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> QUANT_SECURE</span>
+          <span>G7_NODE: OK</span>
+          <span>EM_NODE: OK</span>
         </div>
-        <div className="flex gap-6">
-          <span className="hidden sm:inline">AI_ENGINE: GEMINI-3-PRO-PREVIEW</span>
-          <span>&copy; 2025 QUANTEDGE_INTEL</span>
-        </div>
+        <div>&copy; 2025 QUANTEDGE_INTEL</div>
       </footer>
     </div>
   );
