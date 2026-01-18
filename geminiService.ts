@@ -26,8 +26,9 @@ export async function getInstitutionalInsights() {
   3. "newsFeed": Array of 5 news items with headline, source (Bloomberg, WSJ, FT, or Yahoo Finance ONLY), url, and time.`;
 
   try {
+    // Using gemini-3-pro-preview for high-precision global scan as it's a complex text task
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
@@ -69,7 +70,17 @@ export async function getInstitutionalInsights() {
       },
     });
     
-    return JSON.parse(response.text || '{}');
+    let result = { marketSummary: '', priorityStocks: [], newsFeed: [] };
+    try {
+      result = JSON.parse(response.text || '{}');
+    } catch (e) {
+      console.error("Error parsing AI response:", e);
+    }
+    
+    // Extract grounding chunks as required by the Search Grounding guidelines
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    
+    return { ...result, groundingChunks };
   } catch (error) {
     console.error("Error fetching institutional insights:", error);
     return null;
@@ -92,8 +103,9 @@ export async function analyzeStock(stock: StockMetric): Promise<StockAnalysis> {
   5. Primary Risk Factors.`;
 
   try {
+    // Using gemini-3-pro-preview for complex reasoning and analysis
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: prompt,
       config: {
         responseMimeType: "application/json",
